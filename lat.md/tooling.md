@@ -72,3 +72,11 @@ do not distribute OS media; users are responsible for valid licences.
 [[dashboard/scripts/source-brain-model.test.mjs]] validates provider paths, graph
 limits/windows and bounded revision diff without a browser.
 [[source-lab/RUNBOOK.md]] records the portable release/rollback workflow.
+
+## Two-stage dropper detection harness
+
+[[scripts/analysis/dropper_detect.py]] and [[scripts/analysis/dropper_lab/README.md]]
+provide an offline static and loopback-rehearsal detector for two-stage "clean dropper"
+loaders (`PENT-15`), correlating remote stage fetch, deferred triggers, payload decoding
+and dynamic execution sinks while keeping benign utilities false-positive free.
+
