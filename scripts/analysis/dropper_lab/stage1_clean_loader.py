@@ -6,13 +6,15 @@ MYO062 (19.10 lecture: 'yeni nesil Truva ati: tertemiz gelir, zararli sonradan
 buluttan iner').
 
 Safety controls:
-- Refuses any URL whose host is not loopback (127.0.0.1 / localhost / ::1).
-- Executes the fetched stage-2 code only inside an isolated dictionary with empty
-  __builtins__ when ``allow_exec=True``.
+- Refuses any URL whose scheme is not ``http`` or whose host is not loopback
+  (127.0.0.1 / localhost / ::1), and disables HTTP redirects so external hops cannot occur.
+- Validates the stage-2 AST to permit only inert literal variable assignments before
+  running ``exec`` inside an isolated dictionary when ``allow_exec=True`` (defaults to ``False``).
 """
 
 from __future__ import annotations
 
+import ast
 import base64
 import hashlib
 import json
@@ -32,10 +34,17 @@ DEFAULT_STAGE2_URL = "http://127.0.0.1:8765/stage2.json"
 def assert_loopback_url(url: str) -> str:
     """Validate that a stage-2 URL targets loopback HTTP only."""
     parsed = urllib.parse.urlparse(url)
-    if parsed.scheme not in {"http", "https"}:
-        raise ValueError(f"Unsupported URL scheme {parsed.scheme!r}; expected http/https")
+    if parsed.scheme != "http":
+        raise ValueError(f"Unsupported URL scheme {parsed.scheme!r}; expected http (lab server is HTTP-only)")
     assert_loopback_host(parsed.hostname or "")
     return url
+
+
+class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Refuse all HTTP redirects so a loopback endpoint cannot pivot off-host."""
+
+    def redirect_request(self, req: Any, fp: Any, code: int, msg: str, headers: Any, newurl: str) -> Any:
+        raise ValueError(f"Refusing HTTP redirect ({code}) to {newurl!r} in isolated PENT-15 lab loader")
 
 
 def _wait_for_quiet_window(delay_sec: float = 0.01) -> float:
@@ -50,7 +59,7 @@ def _fetch_remote_stage(
     timeout: float = 3.0,
     opener: Any = None,
 ) -> dict[str, Any]:
-    """Fetch the stage-2 JSON envelope from the local loopback server."""
+    """Fetch the stage-2 JSON envelope from the local loopback server without redirects."""
     assert_loopback_url(stage2_url)
     if opener is not None:
         return opener(stage2_url)
@@ -58,10 +67,11 @@ def _fetch_remote_stage(
         stage2_url,
         headers={"User-Agent": "ThemeSyncHelper/1.4 (os-lab-pent15)"},
     )
-    with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310 (loopback-verified above)
+    http_opener = urllib.request.build_opener(_NoRedirectHandler())
+    with http_opener.open(req, timeout=timeout) as resp:  # noqa: S310 (loopback-verified, redirects blocked)
+        assert_loopback_url(resp.geturl())
         raw = resp.read(65536).decode("utf-8")
     return json.loads(raw)
-
 
 
 def _decode_stage2_payload(packet: dict[str, Any]) -> str:
@@ -75,12 +85,24 @@ def _decode_stage2_payload(packet: dict[str, Any]) -> str:
     return decoded_bytes.decode("utf-8")
 
 
-def _activate_stage2(source_code: str, allow_exec: bool = True) -> dict[str, Any]:
-    """Compile and dynamically execute the stage-2 code inside an isolated lab namespace."""
+def _validate_inert_stage2_ast(source_code: str) -> None:
+    """Restrict executed stage-2 payloads to simple literal assignments."""
+    tree = ast.parse(source_code, filename="<oslab-stage2-payload>", mode="exec")
+    for stmt in tree.body:
+        if not isinstance(stmt, ast.Assign) or not isinstance(stmt.value, ast.Constant):
+            raise ValueError("Refusing non-literal stage-2 statement in isolated lab executor")
+        for target in stmt.targets:
+            if not isinstance(target, ast.Name) or target.id.startswith("_"):
+                raise ValueError("Refusing unsafe assignment target in stage-2 payload")
+
+
+def _activate_stage2(source_code: str, allow_exec: bool = False) -> dict[str, Any]:
+    """Validate, compile, and optionally execute the inert stage-2 code inside an isolated namespace."""
+    _validate_inert_stage2_ast(source_code)
     sandbox_ns: dict[str, Any] = {"__builtins__": {}}
     compiled = compile(source_code, "<oslab-stage2-payload>", "exec")
     if allow_exec:
-        exec(compiled, sandbox_ns, sandbox_ns)  # noqa: S102 (intentionally modeled sink for detector)
+        exec(compiled, sandbox_ns, sandbox_ns)  # noqa: S102 (AST-restricted inert marker payload only)
     return {
         "executed": bool(allow_exec),
         "marker": sandbox_ns.get("STAGE2_MARKER"),
@@ -91,7 +113,7 @@ def _activate_stage2(source_code: str, allow_exec: bool = True) -> dict[str, Any
 def run_stage1(
     stage2_url: str = DEFAULT_STAGE2_URL,
     delay_sec: float = 0.01,
-    allow_exec: bool = True,
+    allow_exec: bool = False,
     opener: Any = None,
 ) -> dict[str, Any]:
     """Run the full stage-1 loader lifecycle against a loopback stage-2 endpoint."""

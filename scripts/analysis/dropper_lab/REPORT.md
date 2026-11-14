@@ -34,7 +34,7 @@ Geleneksel statik imzalar yalnızca tekil zararlı çağrıları aradığında y
 | `scripts/analysis/dropper_lab/stage1_extension_loader.js` | Eğitim amaçlı tarayıcı eklentisi 1. aşama yükleyici |
 | `scripts/analysis/dropper_lab/benign_utility.py` | Negatif kontrol (False-Positive testi için temiz betik) |
 | `console/oslab.py` | `oslab.dropper_audit()` konsol entegrasyonu ve `_scoped` dizin koruması |
-| `android-lab/lab/tests/test_dropper_detect.py` | 10 kapsamlı çevrimdışı birim ve `127.0.0.1` prova testi |
+| `android-lab/lab/tests/test_dropper_detect.py` | 14 kapsamlı çevrimdışı birim ve `127.0.0.1` prova testi |
 
 ---
 

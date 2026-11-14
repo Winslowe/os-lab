@@ -15,6 +15,7 @@ import hashlib
 import http.server
 import ipaddress
 import json
+import socket
 import sys
 import threading
 import time
@@ -35,6 +36,8 @@ BENIGN_STAGE2_JS = (
 def assert_loopback_host(host: str) -> str:
     """Ensure the server or client never binds or connects outside loopback."""
     cleaned = (host or "").strip().lower()
+    if cleaned.startswith("[") and cleaned.endswith("]"):
+        cleaned = cleaned[1:-1]
     if cleaned in {"localhost", "127.0.0.1", "::1"}:
         return "127.0.0.1" if cleaned == "localhost" else cleaned
     try:
@@ -82,9 +85,10 @@ class _Stage2RequestHandler(http.server.BaseHTTPRequestHandler):
         elif self.path.startswith("/stage2.json"):
             self._send_json(200, build_stage2_packet())
         elif self.path.startswith("/stage2.js"):
-            body = BENIGN_STAGE2_JS.encode("utf-8")
+            # Encode as base64 so stage1_extension_loader.js (fetch + atob) decodes it cleanly.
+            body = base64.b64encode(BENIGN_STAGE2_JS.encode("utf-8"))
             self.send_response(200)
-            self.send_header("Content-Type", "application/javascript; charset=utf-8")
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
@@ -104,6 +108,12 @@ class _Stage2RequestHandler(http.server.BaseHTTPRequestHandler):
         return
 
 
+class _IPv6ThreadingHTTPServer(http.server.ThreadingHTTPServer):
+    """ThreadingHTTPServer bound over IPv6 loopback (::1)."""
+
+    address_family = socket.AF_INET6
+
+
 class Stage2LabServer:
     """Context manager running the local loopback stage-2 server on a background thread."""
 
@@ -121,7 +131,8 @@ class Stage2LabServer:
 
     @property
     def base_url(self) -> str:
-        return f"http://{self.host}:{self.port}"
+        host_fmt = f"[{self.host}]" if ":" in self.host else self.host
+        return f"http://{host_fmt}:{self.port}"
 
     @property
     def requests_log(self) -> list[dict[str, Any]]:
@@ -130,7 +141,12 @@ class Stage2LabServer:
         return list(getattr(self._httpd, "requests_log", []))
 
     def start(self) -> Stage2LabServer:
-        httpd = http.server.ThreadingHTTPServer((self.host, self.requested_port), _Stage2RequestHandler)
+        server_cls = (
+            _IPv6ThreadingHTTPServer
+            if ipaddress.ip_address(self.host).version == 6
+            else http.server.ThreadingHTTPServer
+        )
+        httpd = server_cls((self.host, self.requested_port), _Stage2RequestHandler)
         setattr(httpd, "requests_log", [])
         self._httpd = httpd
         self._thread = threading.Thread(target=httpd.serve_forever, name="oslab-stage2-srv", daemon=True)
@@ -151,70 +167,26 @@ class Stage2LabServer:
         self.stop()
 
 
-def run_lab_rehearsal(allow_exec: bool = True) -> dict[str, Any]:
+def run_lab_rehearsal(allow_exec: bool = False) -> dict[str, Any]:
     """Spin up the loopback stage-2 server and run the benign stage-1 loader against it."""
-    import urllib.error
     try:
         from . import stage1_clean_loader
     except ImportError:
         import stage1_clean_loader  # type: ignore[no-redef]
 
-    try:
-        with Stage2LabServer(host="127.0.0.1", port=0) as srv:
-            stage2_url = f"{srv.base_url}/stage2.json"
-            try:
-                trace = stage1_clean_loader.run_stage1(
-                    stage2_url=stage2_url,
-                    delay_sec=0.01,
-                    allow_exec=allow_exec,
-                )
-                requests_log = srv.requests_log
-            except (urllib.error.URLError, PermissionError, OSError):
-                # Fallback when running inside a network-isolated sandbox that blocks loopback sockets
-                requests_log = [
-                    {
-                        "method": "GET",
-                        "path": "/stage2.json",
-                        "client": "127.0.0.1",
-                        "user_agent": "ThemeSyncHelper/1.4 (os-lab-pent15)",
-                        "timestamp": time.time(),
-                    }
-                ]
-                trace = stage1_clean_loader.run_stage1(
-                    stage2_url=stage2_url,
-                    delay_sec=0.01,
-                    allow_exec=allow_exec,
-                    opener=lambda _url: build_stage2_packet(),
-                )
-            return {
-                "rehearsal": "PENT-15-two-stage-loopback",
-                "server_bind": f"{srv.host}:{srv.port}",
-                "stage2_url": stage2_url,
-                "server_requests": requests_log,
-                "stage1_trace": trace,
-            }
-    except (PermissionError, OSError):
-        stage2_url = "http://127.0.0.1:8765/stage2.json"
-        requests_log = [
-            {
-                "method": "GET",
-                "path": "/stage2.json",
-                "client": "127.0.0.1",
-                "user_agent": "ThemeSyncHelper/1.4 (os-lab-pent15)",
-                "timestamp": time.time(),
-            }
-        ]
+    with Stage2LabServer(host="127.0.0.1", port=0) as srv:
+        stage2_url = f"{srv.base_url}/stage2.json"
         trace = stage1_clean_loader.run_stage1(
             stage2_url=stage2_url,
             delay_sec=0.01,
             allow_exec=allow_exec,
-            opener=lambda _url: build_stage2_packet(),
         )
+        host_fmt = f"[{srv.host}]" if ":" in srv.host else srv.host
         return {
             "rehearsal": "PENT-15-two-stage-loopback",
-            "server_bind": "127.0.0.1:8765",
+            "server_bind": f"{host_fmt}:{srv.port}",
             "stage2_url": stage2_url,
-            "server_requests": requests_log,
+            "server_requests": srv.requests_log,
             "stage1_trace": trace,
         }
 

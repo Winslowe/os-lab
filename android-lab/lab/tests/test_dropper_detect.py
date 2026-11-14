@@ -104,11 +104,126 @@ def test_loopback_scope_guard_refuses_non_loopback_targets():
 
     for forbidden_url in (
         "http://example.com/stage2.json",
+        "https://127.0.0.1/stage2.json",
         "https://192.168.1.1/stage2.json",
         "ftp://127.0.0.1/stage2.json",
     ):
         with pytest.raises(ValueError):
             stage1_clean_loader.assert_loopback_url(forbidden_url)
+
+
+def test_stage1_safety_controls_and_redirect_block():
+    import base64
+
+    packet = stage2_server.build_stage2_packet()
+    # Default allow_exec must be False (fail-closed)
+    res_dry = stage1_clean_loader.run_stage1(
+        stage2_url="http://127.0.0.1:8765/stage2.json",
+        delay_sec=0.0,
+        opener=lambda _url: packet,
+    )
+    assert res_dry["activation"]["executed"] is False
+
+    # Untrusted introspection / import payload must be refused before exec()
+    evil_code = "import os\nSTAGE2_MARKER = os.name\n"
+    evil_b64 = base64.b64encode(evil_code.encode("utf-8")).decode("ascii")
+    with pytest.raises(ValueError, match="non-literal|unsafe"):
+        stage1_clean_loader.run_stage1(
+            stage2_url="http://127.0.0.1:8765/stage2.json",
+            delay_sec=0.0,
+            allow_exec=True,
+            opener=lambda _url: {"payload_b64": evil_b64},
+        )
+
+    # HTTP redirects to non-loopback targets must be refused by the redirect handler
+    handler = stage1_clean_loader._NoRedirectHandler()
+    with pytest.raises(ValueError, match="redirect"):
+        handler.redirect_request(None, None, 302, "Found", {}, "http://example.com/payload")
+
+
+def test_stage2_js_endpoint_serves_valid_base64_and_ipv6_base_url():
+    import base64
+    import urllib.request
+
+    with stage2_server.Stage2LabServer(host="127.0.0.1", port=0) as srv:
+        with urllib.request.urlopen(f"{srv.base_url}/stage2.js", timeout=3.0) as resp:
+            encoded = resp.read().decode("utf-8")
+        decoded = base64.b64decode(encoded).decode("utf-8")
+        assert decoded == stage2_server.BENIGN_STAGE2_JS
+
+    ipv6_srv = stage2_server.Stage2LabServer(host="::1", port=8765)
+    assert ipv6_srv.base_url == "http://[::1]:8765"
+
+
+def test_detector_resists_evasion_and_false_positives(tmp_path):
+    # Aliased Python imports with fetch -> exec flow must still be flagged CRITICAL
+    aliased_py = (
+        "import urllib.request as req\n"
+        "from base64 import b64decode as dec\n"
+        "from time import sleep as pause\n"
+        "pause(1)\n"
+        "blob = req.urlopen('http://127.0.0.1/s2').read()\n"
+        "exec(dec(blob))\n"
+    )
+    aliased_report = dropper_detect.scan_content(aliased_py, filename="aliased.py")
+    assert aliased_report["classification"] == "TWO_STAGE_DROPPER"
+    assert aliased_report["risk_level"] == "CRITICAL"
+
+    # Python docstrings containing example code must stay CLEAN
+    docstring_py = (
+        '"""Example docs:\n'
+        "    urllib.request.urlopen('http://127.0.0.1/stage2')\n"
+        "    exec(base64.b64decode(data))\n"
+        '"""\n'
+        "def helper():\n"
+        "    return 1\n"
+    )
+    doc_report = dropper_detect.scan_content(docstring_py, filename="docs_example.py")
+    assert doc_report["risk_level"] == "CLEAN"
+    assert doc_report["finding_count"] == 0
+
+    # JS inline block comment + http:// string literal must not hide eval(atob(...))
+    js_tricky = (
+        'const url = "http://127.0.0.1/stage2.js";\n'
+        "setTimeout(async () => {\n"
+        "  const r = await fetch(url);\n"
+        "  const txt = await r.text();\n"
+        "  /* keep inline comment */ eval(atob(txt));\n"
+        "}, 1000);\n"
+    )
+    js_report = dropper_detect.scan_content(js_tricky, filename="tricky.js")
+    assert js_report["classification"] == "TWO_STAGE_DROPPER"
+    assert js_report["risk_level"] == "CRITICAL"
+
+    # No-fetch code (defer + decode + exec only) must NOT be called TWO_STAGE_DROPPER
+    no_fetch = (
+        "import time, base64\n"
+        "time.sleep(0.1)\n"
+        "exec(base64.b64decode('eCA9IDE='))\n"
+    )
+    no_fetch_report = dropper_detect.scan_content(no_fetch, filename="local_loader.py")
+    assert no_fetch_report["classification"] == "SUSPICIOUS_DYNAMIC_LOADER"
+
+    # Unrelated fetch and exec functions with no data/call link must NOT trigger DROPPER_CHAIN
+    unrelated_py = (
+        "import urllib.request\n"
+        "def check_health():\n"
+        "    return urllib.request.urlopen('http://127.0.0.1/health').status\n"
+        "def eval_math(expr):\n"
+        "    return eval(expr)\n"
+    )
+    unrelated_report = dropper_detect.scan_content(unrelated_py, filename="unrelated.py")
+    assert unrelated_report["classification"] != "TWO_STAGE_DROPPER"
+    assert "DROPPER_CHAIN_FETCH_EXEC" not in {f["rule_id"] for f in unrelated_report["findings"]}
+
+    # Oversized file must be skipped safely without aborting scan_path
+    small_ok = tmp_path / "ok.py"
+    small_ok.write_text("x = 1\n", encoding="utf-8")
+    big_file = tmp_path / "huge.py"
+    big_file.write_text("x = 1\n" * 500, encoding="utf-8")
+    bounded_report = dropper_detect.scan_path(tmp_path, max_bytes=128)
+    assert bounded_report["total_files_scanned"] == 1
+    assert bounded_report["skipped_count"] == 1
 
 
 def test_two_stage_loopback_rehearsal_end_to_end():
