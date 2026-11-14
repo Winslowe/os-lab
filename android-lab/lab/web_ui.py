@@ -335,6 +335,10 @@ class LabHttpHandler(BaseHTTPRequestHandler):
             self._json(200, oslab.lab_config(REPO_ROOT, parts[2]))
         elif len(parts) == 4 and parts[:2] == ["api", "labs"] and parts[2] in oslab.LABS and parts[3] == "monitor":
             self._json(200, oslab.monitor(REPO_ROOT, parts[2], cached_host()))
+        elif len(parts) == 4 and parts[:2] == ["api", "labs"] and parts[2] == "ios" and parts[3] == "simulator":
+            self._json(200, oslab.ios_simulator(REPO_ROOT))
+        elif len(parts) == 4 and parts[:2] == ["api", "labs"] and parts[2] == "ios" and parts[3] == "screenshot":
+            self._send_bytes(200, oslab.ios_screenshot(), "image/png", cache="no-store")
         elif path == "/api/jobs":
             self._json(200, {"jobs": JOBS.list()})
         elif len(parts) == 3 and parts[:2] == ["api", "jobs"]:

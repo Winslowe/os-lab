@@ -24,9 +24,25 @@ mac-*`.
 
 Environment checks [[ios-lab/mac/doctor-mac.sh]], setup
 [[ios-lab/mac/setup-mac.sh]], simulator control [[ios-lab/mac/run-simulator.sh]]
-and [[ios-lab/mac/stop-simulator.sh]], and Appium [[ios-lab/mac/appium.sh]];
-device presets in [[ios-lab/mac/profiles]]. `labctl` refuses the Ubuntu path on
-macOS — see [[labctl#Lab dispatch]].
+and [[ios-lab/mac/stop-simulator.sh]], Appium [[ios-lab/mac/appium.sh]], idb
+[[ios-lab/mac/idb.sh]] and the XCUITest smoke run
+[[ios-lab/mac/xcuitest.sh]]; device presets in [[ios-lab/mac/profiles]].
+`labctl` refuses the Ubuntu path on macOS — see [[labctl#Lab dispatch]].
+
+Optional automation follows the same install/start/stop pattern as Appium:
+`idb.sh install` puts the client in `~/.oslab/idb` and takes the companion
+from Homebrew, `idb.sh start` runs a companion for the booted simulator, and
+`xcuitest.sh smoke` creates a real XCUITest session through the running
+Appium server to prove the whole chain. All three appear on the iOS and
+macOS Lab pages as previewed actions and stay optional — the simulator runs
+without them.
+
+The dashboard's simulator panel (see [[dashboard]]) drives the same scripts:
+`start` accepts a `device` (a UDID or unique name, validated against
+`xcrun simctl` by the console) so the panel can boot the device picked in its
+frame, and read-only `/api/labs/ios/simulator` and
+`/api/labs/ios/screenshot` endpoints feed the panel's device list and live
+screen.
 
 ## Research
 

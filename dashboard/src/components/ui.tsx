@@ -10,6 +10,7 @@ export function Section({
   title,
   description,
   action,
+  className,
   children
 }: {
   id?: string;
@@ -17,10 +18,11 @@ export function Section({
   title: string;
   description?: ReactNode;
   action?: ReactNode;
+  className?: string;
   children: ReactNode;
 }) {
   return (
-    <section id={id} className="iux-card gap-4 py-5">
+    <section id={id} className={"iux-card gap-4 py-5" + (className ? ` ${className}` : "")}>
       <div className="flex flex-wrap items-start gap-3 px-5">
         <div className="min-w-0 flex-1">
           <h2 className="flex items-center gap-2 text-sm leading-none font-semibold">

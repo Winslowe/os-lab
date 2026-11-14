@@ -2355,5 +2355,20 @@
   "measured · Move to Trash": "mesurés · Déplacer vers la corbeille",
   "moved to Trash, not yet freed.": "déplacés vers la corbeille, espace pas encore libéré.",
   "seconds. Cleaning moves items to Trash; it does not free disk space until Trash is emptied.": "secondes. Le nettoyage déplace les éléments vers la corbeille ; l’espace n’est libéré qu’après sa vidange.",
-  "skipped": "ignorés"
+  "skipped": "ignorés",
+  "Simulator": "Simulateur",
+  "Pick a device, attach it and watch its screen here.": "Choisissez un appareil, connectez-le et suivez son écran ici.",
+  "Booted": "Démarré",
+  "Attach a simulator to see its screen here": "Connectez un simulateur pour voir son écran ici",
+  "Shut-down devices boot when you attach.": "Les appareils éteints démarrent à la connexion.",
+  "Attach simulator": "Connecter le simulateur",
+  "Detach simulator": "Déconnecter le simulateur",
+  "Frame": "Cadre",
+  "Screenshot": "Capture d'écran",
+  "Simulator screen": "Écran du simulateur",
+  "The simulator tooling is not usable on this Mac.": "Les outils du simulateur ne sont pas utilisables sur ce Mac.",
+  "Automation": "Automatisation",
+  "Install idb": "Installer idb",
+  "Stack": "Stack",
+  "idb": "idb"
 }

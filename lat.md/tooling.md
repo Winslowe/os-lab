@@ -15,7 +15,10 @@ environment (a `.venv-test` unless `--no-venv`), runs the pytest suite in
 shell script with `bash -n`, runs `lat check` when `lat` is installed, and,
 when `dashboard/node_modules` exists, typechecks the [[dashboard]] and fails if
 the committed `dashboard/dist` differs from a fresh build.
-`--quick` runs only the unit tests. The dormant workflow file
+The OS-30 standard-library suite in [[linux-lab/tests/test_hardening.py]],
+[[linux-lab/tests/test_harden_check.py]] and [[linux-lab/tests/test_rollback.py]]
+also runs in stage 1, using fake commands and temporary files rather than live
+security changes. `--quick` runs only the unit suites. The dormant workflow file
 [[.github/workflows/mobile-sec-scan.yml]] is kept for reference but is disabled.
 
 ## Tests

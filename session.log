@@ -1,0 +1,6 @@
+# Session started: 2026-11-13
+cmd: nmap -sV -p 1-1000 127.0.0.1
+Result: Port 22 (SSH), Port 80 (HTTP) open.
+cmd: frida-ps -U
+Result: Listed attached devices.
+# Session ended cleanly. Target remained within 127.0.0.1 scope.

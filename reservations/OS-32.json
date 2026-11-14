@@ -1,5 +1,9 @@
 {
-  "task": "OS-32",
+  "id": "OS-32",
+  "name": "Zehra Karaman · 2620511021",
+  "github": "zehrakaramqn",
   "course": "MYO203",
-  "student": "Zehra Karaman"
+  "status": "done",
+  "pr": "https://github.com/keyvanarasteh/os-lab/pull/176",
+  "date": "2026-11-14"
 }

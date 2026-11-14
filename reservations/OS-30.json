@@ -2,7 +2,8 @@
   "id": "OS-30",
   "name": "İremnur Yasav · 2520161031",
   "github": "iremysv",
-  "status": "reserved",
-  "pr": "",
-  "date": "2026-11-09"
+  "course": "MYO203",
+  "status": "done",
+  "pr": "https://github.com/keyvanarasteh/os-lab/pull/194",
+  "date": "2026-11-14"
 }

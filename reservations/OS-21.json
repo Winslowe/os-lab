@@ -1,7 +1,10 @@
 {
-  "task": "OS-21",
-  "status": "reserved",
-  "pr": "",
-  "course": "BGT208",
-  "note": "Vize Projesi - OS-21"
+  "id": "OS-21",
+  "name": "Bekircan Demirkıran · 2620511078",
+  "github": "Candeshcve",
+  "course": "MYO203",
+  "note": "Vize Projesi - OS-21",
+  "status": "pr-open",
+  "pr": "https://github.com/keyvanarasteh/os-lab/pull/182",
+  "date": "2026-11-14"
 }

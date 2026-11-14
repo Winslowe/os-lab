@@ -196,6 +196,10 @@ Run from the checkout root as `make -C ios-lab TARGET [VARIABLE=value ...]`.
 - `mac-stop` — macOS host: shut down simulators and the Simulator app
 - `mac-appium` — macOS host: start Appium (XCUITest driver)
 - `mac-appium-stop` — macOS host: stop Appium
+- `mac-idb-install` — macOS host: install idb companion (Homebrew) and client
+- `mac-idb` — macOS host: start an idb companion for the booted simulator
+- `mac-idb-stop` — macOS host: stop the idb companion
+- `mac-xcuitest` — macOS host: run one XCUITest session through Appium on the booted simulator
 - `mac-status` — macOS host: show Xcode, booted simulators and Appium state
 
 ## Make targets: `android-lab/lab/Makefile`
@@ -530,7 +534,7 @@ From android-lab/lab: `.\lab.ps1 COMMAND [parameters]`.
 
 Accepted commands (from the actual ValidateSet):
 
-"help", "preflight", "setup", "vbox-create", "vbox-download-iso", "vbox-start", "vbox-autoinstall", "vbox-deploy-android", "vbox-stop", "vbox-status", "podman-status", "mobsf-status", "mobsf-start", "mobsf-scan", "wf1", "wf2", "hook", "report", "clean", "monitor", "telemetry", "dump-sandbox", "scan-secrets", "trace-crypto", "parse-flows", "analyze-app", "generate-report", "fuzz-ipc", "patch-apk", "agentic-plan", "ui"
+"help", "preflight", "win-preflight", "setup", "vbox-create", "vbox-download-iso", "vbox-start", "vbox-autoinstall", "vbox-deploy-android", "vbox-stop", "vbox-status", "podman-status", "mobsf-status", "mobsf-start", "mobsf-scan", "wf1", "wf2", "hook", "report", "clean", "monitor", "telemetry", "dump-sandbox", "scan-secrets", "trace-crypto", "parse-flows", "analyze-app", "generate-report", "fuzz-ipc", "patch-apk", "agentic-plan", "ui"
 
 Parameters (names/types only; values are supplied by the operator):
 
@@ -548,6 +552,7 @@ Parameters (names/types only; values are supplied by the operator):
 - `string $Iso`
 - `switch $Gui`
 - `string $Distro`
+- `switch $Json`
 
 ## Configuration keys: `win-lab/.env.example`
 
@@ -563,7 +568,7 @@ Parameters (names/types only; values are supplied by the operator):
 
 ## Configuration keys: `ios-lab/mac/config.env.example`
 
-`SIM_DEVICE`, `IOS_RUNTIME`, `APPIUM_HOST`, `APPIUM_PORT`, `APPIUM_LOG`, `BOOT_TIMEOUT`
+`SIM_DEVICE`, `IOS_RUNTIME`, `APPIUM_HOST`, `APPIUM_PORT`, `APPIUM_LOG`, `IDB_PORT`, `BOOT_TIMEOUT`
 
 ## Configuration keys: `android-lab/lab/.env.example`
 

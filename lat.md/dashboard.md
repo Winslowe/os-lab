@@ -17,6 +17,18 @@ the Android workbench in [[dashboard/src/views/android/pages.tsx]].
 [[dashboard/src/lib/api.ts]] is the typed client; it mirrors qLar's
 `shared/os-lab.ts` contract.
 
+## iOS Simulator panel
+
+When the iOS Lab is ready through the native-macos provider,
+[[dashboard/src/views/ios-simulator.tsx]] replaces the plain start/stop
+buttons with a device frame: a device picker, previewed attach/detach, a
+toggleable bezel and a live screen.
+
+The screen comes from the read-only `/api/labs/ios/simulator` and
+`/api/labs/ios/screenshot` endpoints. The panel still routes every state
+change through the previewed plan flow; the console validates the device
+against `xcrun simctl` (see [[ios-lab]]).
+
 ## UX readiness
 
 [[ux-readiness]] records the dashboard's action, endpoint, and navigation

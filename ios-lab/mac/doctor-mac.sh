@@ -58,6 +58,17 @@ else
   warn "Appium is not running on ${APPIUM_HOST}:${APPIUM_PORT}"
 fi
 
+say "idb"
+IDB_BIN="$(command -v idb 2>/dev/null || true)"
+if [ -z "$IDB_BIN" ] && [ -x "$HOME/.oslab/idb/bin/idb" ]; then IDB_BIN="$HOME/.oslab/idb/bin/idb"; fi
+if [ -n "$IDB_BIN" ]; then ok "idb client: $IDB_BIN"; else warn "idb client not found (Install idb in the dashboard, or pipx install fb-idb)"; fi
+if command -v idb_companion >/dev/null 2>&1; then ok "idb companion: present"; else warn "idb companion not found (brew install idb-companion)"; fi
+if [ -f "$MAC_DIR/.idb-companion.pid" ] && kill -0 "$(cat "$MAC_DIR/.idb-companion.pid")" 2>/dev/null; then
+  ok "idb companion is running (grpc :$IDB_PORT)"
+else
+  warn "idb companion is not running (make mac-idb)"
+fi
+
 say "config"
 ok "device: $SIM_DEVICE"
 ok "runtime: $IOS_RUNTIME"

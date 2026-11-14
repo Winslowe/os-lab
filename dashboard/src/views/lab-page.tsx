@@ -4,7 +4,7 @@
  * os-lab/lab-page.tsx (PR #174): every action is previewed (exact command, effects, setup
  * prerequisites, privileges) before it runs, and runs as a background job with retained output.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   ArrowClockwiseIcon,
   CheckCircleIcon,
@@ -23,6 +23,7 @@ import { AppShell, LAB_ICON } from "../shell/app-shell";
 import { TopBar } from "../shell/top-bar";
 import { ShellSnippet } from "../apk-lab/components";
 import { Badge, Empty, EndpointList, Field, PageHead, Section, Skeleton, Status } from "../components/ui";
+import { SimulatorPanel } from "./ios-simulator";
 import { stateBadge } from "./host-page";
 import {
   ago,
@@ -49,10 +50,34 @@ const REFERENCE: Record<LabId, { check: string; setup: string; where: string }> 
 };
 
 const ACTION_GROUPS: { title: string; ids: string[] }[] = [
-  { title: "Lifecycle", ids: ["start", "stop", "restart", "appium-install", "appium-start", "appium-stop"] },
+  { title: "Automation", ids: ["appium-install", "idb-install", "xcuitest-smoke"] },
   { title: "Inspect", ids: ["status", "doctor", "urls", "logs", "monitor"] },
   { title: "Maintenance", ids: ["backup", "service-install", "service-uninstall"] }
 ];
+
+/** Start/stop clusters render as one segmented icon control per tool, titled by what it drives. */
+const SEGMENT_GROUPS: { title: string; ids: string[] }[] = [
+  { title: "Stack", ids: ["start", "stop", "restart"] },
+  { title: "Appium", ids: ["appium-start", "appium-stop"] },
+  { title: "idb", ids: ["idb-start", "idb-stop"] }
+];
+
+/** One icon per segment; start segments keep the primary (orange) affordance. */
+const SEGMENT_ICON: Record<string, ReactNode> = {
+  start: <PlayIcon size={14} weight="fill" />,
+  stop: <StopIcon size={14} />,
+  restart: <ArrowClockwiseIcon size={14} />,
+  "appium-start": <PlayIcon size={14} weight="fill" />,
+  "appium-stop": <StopIcon size={14} />,
+  "idb-start": <PlayIcon size={14} weight="fill" />,
+  "idb-stop": <StopIcon size={14} />
+};
+
+/** Optional dependencies that have a one-click install action, keyed by requirement id. */
+const OPTIONAL_INSTALLS: Record<string, { action: string; label: string }> = {
+  appium: { action: "appium-install", label: "Install Appium" },
+  idb: { action: "idb-install", label: "Install idb" }
+};
 
 /** Scripts print `##PROGRESS n/total label` per step; the last one drives the bar and the lines stay out of the output. */
 const PROGRESS = /^##PROGRESS (\d+)\/(\d+) (.*)$/;
@@ -81,9 +106,9 @@ function Requirements({ lab, onInstall }: { lab: LabStatus; onInstall?: (action:
             {r.label}
             {!r.found && r.hint ? <span className="block text-xs text-(--iux-muted-foreground)">{r.hint}</span> : null}
           </span>
-          {!r.found && r.id === "appium" && onInstall && lab.actions.some((a) => a.id === "appium-install") ? (
-            <button type="button" className="iux-btn" onClick={() => onInstall("appium-install")}>
-              Install Appium
+          {!r.found && OPTIONAL_INSTALLS[r.id] && onInstall && lab.actions.some((a) => a.id === OPTIONAL_INSTALLS[r.id]!.action) ? (
+            <button type="button" className="iux-btn" onClick={() => onInstall(OPTIONAL_INSTALLS[r.id]!.action)}>
+              {OPTIONAL_INSTALLS[r.id]!.label}
             </button>
           ) : null}
           <Badge tone={r.found ? "success" : r.required ? "danger" : undefined}>
@@ -457,6 +482,12 @@ function LiveLabPage({ lab: labId }: { lab: LabId }) {
   const label = lab?.label ?? labId;
   const actions = new Map((lab?.actions ?? []).map((a) => [a.id, a]));
   const ref = REFERENCE[labId];
+  // The ready iOS Simulator gets a device frame panel instead of plain start/stop buttons.
+  const simulator = labId === "ios" && lab?.provider === "native-macos" && lab.state === "ready";
+  // Every tracked prerequisite is found: the card would only repeat success badges, so it yields
+  // its half of the row to the actions. Anything missing keeps the full status list visible.
+  const requirements = lab?.requirements ?? [];
+  const depsInstalled = requirements.length > 0 && requirements.every((r) => r.found);
 
   return (
     <AppShell activeId={`lab-${labId}`}>
@@ -509,6 +540,8 @@ function LiveLabPage({ lab: labId }: { lab: LabId }) {
                 />
               ) : null}
 
+              {simulator ? <SimulatorPanel onPreview={(action, extra) => void preview(action, extra)} /> : null}
+
               {lab.state === "unavailable" ? (
                 <Section title="Run it elsewhere" description={`On a supported host, these commands run from the os-lab checkout (${ref.where}).`}>
                   <div className="flex flex-col gap-3">
@@ -518,27 +551,34 @@ function LiveLabPage({ lab: labId }: { lab: LabId }) {
               ) : (
                 <>
                   <div className="grid gap-6 lg:grid-cols-2">
-                    <Section
-                      icon={<WrenchIcon size={16} />}
-                      title="Dependencies"
-                      description="What this lab needs on this computer."
-                      action={
-                        lab.requirements.some((r) => r.required && !r.found) && actions.has("setup") ? (
-                          <button
-                            type="button"
-                            className={lab.state === "needs-setup" ? "iux-btn bg-[#f36c21] text-white hover:bg-[#fa7b32]" : "iux-btn"}
-                            data-variant={lab.state === "needs-setup" ? undefined : "outline"}
-                            onClick={() => void preview("setup")}
-                          >
-                            Install dependencies
-                          </button>
-                        ) : null
-                      }
-                    >
-                      <Requirements lab={lab} onInstall={(action) => void preview(action)} />
-                    </Section>
+                    {depsInstalled ? null : (
+                      <Section
+                        icon={<WrenchIcon size={16} />}
+                        title="Dependencies"
+                        description="What this lab needs on this computer."
+                        action={
+                          lab.requirements.some((r) => r.required && !r.found) && actions.has("setup") ? (
+                            <button
+                              type="button"
+                              className={lab.state === "needs-setup" ? "iux-btn bg-[#f36c21] text-white hover:bg-[#fa7b32]" : "iux-btn"}
+                              data-variant={lab.state === "needs-setup" ? undefined : "outline"}
+                              onClick={() => void preview("setup")}
+                            >
+                              Install dependencies
+                            </button>
+                          ) : null
+                        }
+                      >
+                        <Requirements lab={lab} onInstall={(action) => void preview(action)} />
+                      </Section>
+                    )}
 
-                    <Section icon={<PlayIcon size={16} />} title="Actions" description="Each action is previewed before it runs.">
+                    <Section
+                      className={depsInstalled ? "lg:col-span-2" : undefined}
+                      icon={<PlayIcon size={16} />}
+                      title="Actions"
+                      description="Each action is previewed before it runs."
+                    >
                       <div className="flex flex-col gap-4">
                         {lab.state === "needs-setup" ? (
                           <p className="text-xs text-(--iux-muted-foreground)">
@@ -554,6 +594,46 @@ function LiveLabPage({ lab: labId }: { lab: LabId }) {
                             </select>
                           </Field>
                         ) : null}
+                        {SEGMENT_GROUPS.map((group) => {
+                          const items = group.ids
+                            .filter((id) => !(simulator && (id === "start" || id === "stop")))
+                            .map((id) => actions.get(id))
+                            .filter(Boolean);
+                          if (!items.length) return null;
+                          return (
+                            <div key={group.title}>
+                              <p className="mb-2 text-xs font-medium text-(--iux-muted-foreground)">{group.title}</p>
+                              {items.length === 1 ? (
+                                // A lone segment (e.g. restart while the simulator panel owns start/stop) keeps a labelled button.
+                                <button
+                                  type="button"
+                                  className="iux-btn"
+                                  data-variant="outline"
+                                  title={items[0]!.description}
+                                  onClick={() => void preview(items[0]!.id)}
+                                >
+                                  {SEGMENT_ICON[items[0]!.id] ?? null} {items[0]!.label}
+                                </button>
+                              ) : (
+                                <div role="group" aria-label={group.title} className="iux-seg">
+                                  {items.map((a) => (
+                                    <button
+                                      key={a!.id}
+                                      type="button"
+                                      title={a!.description}
+                                      aria-label={a!.label}
+                                      data-primary={a!.id.endsWith("start") ? "true" : undefined}
+                                      onClick={() => void preview(a!.id)}
+                                    >
+                                      {SEGMENT_ICON[a!.id] ?? <PlayIcon size={14} weight="fill" />}
+                                      {a!.privileged ? <ShieldWarningIcon size={13} className="text-(--iux-warning)" /> : null}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                         {ACTION_GROUPS.map((group) => {
                           const items = group.ids.map((id) => actions.get(id)).filter(Boolean);
                           if (!items.length) return null;
@@ -565,8 +645,8 @@ function LiveLabPage({ lab: labId }: { lab: LabId }) {
                                   <button
                                     key={a!.id}
                                     type="button"
-                                    className={a!.id === "start" ? "iux-btn bg-[#f36c21] text-white hover:bg-[#fa7b32]" : "iux-btn"}
-                                    data-variant={a!.id === "start" ? undefined : "outline"}
+                                    className="iux-btn"
+                                    data-variant="outline"
                                     title={a!.description}
                                     onClick={() => void preview(a!.id)}
                                   >

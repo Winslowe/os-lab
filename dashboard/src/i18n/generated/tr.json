@@ -2355,5 +2355,20 @@
   "measured · Move to Trash": "ölçüldü · Çöp'e taşı",
   "moved to Trash, not yet freed.": "Çöp'e taşındı, alan henüz boşalmadı.",
   "seconds. Cleaning moves items to Trash; it does not free disk space until Trash is emptied.": "saniye. Temizlik öğeleri Çöp'e taşır; Çöp boşaltılana kadar disk alanı açılmaz.",
-  "skipped": "atlandı"
+  "skipped": "atlandı",
+  "Simulator": "Simülatör",
+  "Pick a device, attach it and watch its screen here.": "Bir cihaz seçin, bağlayın ve ekranını buradan izleyin.",
+  "Booted": "Açık",
+  "Attach a simulator to see its screen here": "Ekranını burada görmek için bir simülatör bağlayın",
+  "Shut-down devices boot when you attach.": "Kapalı cihazlar bağlandığında açılır.",
+  "Attach simulator": "Simülatörü bağlayın",
+  "Detach simulator": "Simülatörü ayırın",
+  "Frame": "Çerçeve",
+  "Screenshot": "Ekran görüntüsü",
+  "Simulator screen": "Simülatör ekranı",
+  "The simulator tooling is not usable on this Mac.": "Simülatör araçları bu Mac'te kullanılamıyor.",
+  "Automation": "Otomasyon",
+  "Install idb": "idb kur",
+  "Stack": "Yığın",
+  "idb": "idb"
 }

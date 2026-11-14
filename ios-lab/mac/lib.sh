@@ -17,6 +17,7 @@ IOS_RUNTIME="${IOS_RUNTIME:-latest}"
 APPIUM_HOST="${APPIUM_HOST:-127.0.0.1}"
 APPIUM_PORT="${APPIUM_PORT:-4723}"
 APPIUM_LOG="${APPIUM_LOG:-artifacts/appium.log}"
+IDB_PORT="${IDB_PORT:-10882}"
 BOOT_TIMEOUT="${BOOT_TIMEOUT:-300}"
 
 say() { printf '==> %s\n' "$*"; }

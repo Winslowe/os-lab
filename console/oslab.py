@@ -28,6 +28,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import uuid
@@ -96,11 +97,13 @@ TOOLS = [
     ("apt-get", "APT package manager"),
     ("pkexec", "Polkit (graphical sudo)"),
     ("sudo", "sudo"),
+    ("idb", "idb client"),
+    ("idb-companion", "idb companion"),
 ]
 
 # Tools that only make sense on some hosts; everything else is reported everywhere.
 TOOL_HOSTS = {
-    "xcrun": {"macos"}, "brew": {"macos"},
+    "xcrun": {"macos"}, "brew": {"macos"}, "idb": {"macos"}, "idb-companion": {"macos"},
     "wsl": {"windows"},
     "apt-get": {"linux"}, "pkexec": {"linux"}, "sudo": {"linux", "macos"},
 }
@@ -112,7 +115,8 @@ def tools_for_host(os_name: str) -> list[tuple[str, str]]:
 
 LABCTL_ACTIONS = ["status", "doctor", "urls", "logs", "monitor", "start", "stop", "restart",
                   "profile", "resize", "setup", "backup", "service-install", "service-uninstall"]
-MAC_ACTIONS = ["status", "doctor", "setup", "start", "stop", "appium-install", "appium-start", "appium-stop"]
+MAC_ACTIONS = ["status", "doctor", "setup", "start", "stop", "appium-install", "appium-start", "appium-stop",
+               "idb-install", "idb-start", "idb-stop", "xcuitest-smoke"]
 
 ACTION_INFO = {
     "csv-merge": ("Join catalogs", "Join operator catalogs into private storage."),
@@ -137,16 +141,20 @@ ACTION_INFO = {
     "appium-install": ("Install Appium", "Install Node (Homebrew if needed), Appium and the XCUITest driver for this user only. No administrator rights."),
     "appium-start": ("Start Appium", "Start the Appium server with XCUITest."),
     "appium-stop": ("Stop Appium", "Stop the Appium server."),
+    "idb-install": ("Install idb", "Install idb companion (Homebrew) and the idb client for this user only. No administrator rights."),
+    "idb-start": ("Start idb", "Start an idb companion for the booted simulator."),
+    "idb-stop": ("Stop idb", "Stop the idb companion."),
+    "xcuitest-smoke": ("XCUITest smoke test", "Run one real XCUITest session through Appium and WebDriverAgent on the booted simulator."),
 }
 
 # On the native Mac path "start" and "stop" drive the iOS Simulator, not a container stack.
 NATIVE_SIMULATOR_INFO = {
-    "start": ("Start iOS Simulator", "Boot the configured iOS Simulator device on this Mac."),
-    "stop": ("Stop iOS Simulator", "Shut the iOS Simulator down."),
+    "start": ("Start iOS Simulator", "Boot an installed iOS Simulator device on this Mac."),
+    "stop": ("Stop iOS Simulator", "Shut every booted iOS Simulator down."),
 }
 
-# Offered while a required dependency is missing: install it, install Appium, or run the preflight.
-SETUP_STATE_ACTIONS = {"setup", "appium-install", "doctor"}
+# Offered while a required dependency is missing: install it, install Appium or idb, or run the preflight.
+SETUP_STATE_ACTIONS = {"setup", "appium-install", "idb-install", "doctor"}
 
 PRIVILEGED = {"setup", "service-install", "service-uninstall"}
 SECRET_PARTS = ("PASSWORD", "SECRET", "TOKEN", "API_KEY", "PRIVATE_KEY", "CREDENTIAL")
@@ -183,9 +191,15 @@ def _managed_appium() -> str | None:
     return path if os.path.isfile(path) and os.access(path, os.X_OK) else None
 
 
+def _managed_idb() -> str | None:
+    """idb client installed by ios-lab/mac/idb.sh install (its own virtualenv, no PATH changes)."""
+    path = os.path.join(os.environ.get("OSLAB_IDB_HOME") or os.path.expanduser("~/.oslab/idb"), "bin", "idb")
+    return path if os.path.isfile(path) and os.access(path, os.X_OK) else None
+
+
 def _which(name: str) -> str | None:
     found = shutil.which(name)
-    return found or (_managed_appium() if name == "appium" else None)
+    return found or {"appium": _managed_appium, "idb": _managed_idb}.get(name, lambda: None)()
 
 
 def _read(path: str) -> str:
@@ -279,6 +293,86 @@ def xcode_status() -> dict:
     code, output = _capture(["xcrun", "simctl", "list", "runtimes"], timeout=10)
     ios_runtime = code == 0 and any(line.startswith("iOS ") for line in output.splitlines())
     return {"installed": installed, "iosRuntime": ios_runtime, "iosDevice": ios_device}
+
+
+# ── iOS Simulator panel (native macOS) ───────────────────────────────────────
+
+UDID = re.compile(r"^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$")
+
+
+def _simctl_json(args: list[str]) -> dict:
+    """`xcrun simctl list -j …` as a dict, or {} when simctl is missing, slow or fails."""
+    if host_os() != "macos" or not _which("xcrun"):
+        return {}
+    code, output = _capture(["xcrun", "simctl"] + args, timeout=15)
+    try:
+        return json.loads(output) if code == 0 else {}
+    except ValueError:
+        return {}
+
+
+def ios_simulator(root: str) -> dict:
+    """Simulator panel data for the iOS Lab: installed devices, runtimes and what is booted."""
+    devices_json = _simctl_json(["list", "-j", "devices"])
+    if not devices_json:
+        return {"available": False, "reason": "Xcode and its simulator tooling are not usable on this Mac",
+                "devices": [], "runtimes": [], "booted": [], "configuredDevice": None}
+    runtimes_json = _simctl_json(["list", "-j", "runtimes"])
+    runtimes = {r.get("identifier", ""): r.get("name") or f"iOS {r.get('version', '')}"
+                for r in runtimes_json.get("runtimes", []) if "iOS" in r.get("name", "")}
+    devices = []
+    for runtime, entries in devices_json.get("devices", {}).items():
+        if "iOS" not in runtime:
+            continue
+        for d in entries:
+            if not d.get("isAvailable", True):
+                continue
+            devices.append({"udid": d.get("udid", ""), "name": d.get("name", ""),
+                            "runtime": runtimes.get(runtime, runtime), "state": d.get("state", "")})
+    devices.sort(key=lambda d: (d["name"], d["runtime"]))
+    config = env_entries(_read(os.path.join(root, "ios-lab", "mac", "config.env")))
+    return {"available": True, "reason": None, "devices": devices,
+            "runtimes": sorted(set(runtimes.values())),
+            "booted": [d for d in devices if d["state"] == "Booted"],
+            "configuredDevice": config.get("SIM_DEVICE") or None}
+
+
+def ios_screenshot() -> bytes:
+    """A PNG of the booted simulator's screen. Raises PlanError when nothing is booted."""
+    code, output = _capture(["xcrun", "simctl", "list", "devices"], timeout=15)
+    if code != 0 or not any("Booted" in line for line in output.splitlines()):
+        raise PlanError("No iOS Simulator is booted; attach one first")
+    fd, path = tempfile.mkstemp(suffix=".png")
+    try:
+        os.close(fd)
+        code, output = _capture(["xcrun", "simctl", "io", "booted", "screenshot", "--type=png", path], timeout=30)
+        if code != 0:
+            raise PlanError("Could not take a simulator screenshot: " + output.strip()[:200])
+        with open(path, "rb") as f:
+            png = f.read()
+        if not png.startswith(b"\x89PNG"):
+            raise PlanError("The simulator screenshot was not a readable PNG")
+        return png
+    finally:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+
+
+def _validated_ios_device(root: str, device: str) -> dict:
+    """A device record from the simulator panel: exact UDID, or a name that names exactly one device."""
+    info = ios_simulator(root)
+    if not info["available"]:
+        raise PlanError(info["reason"] or "The simulator tooling is not usable on this Mac")
+    if any(d["udid"] == device for d in info["devices"]):
+        return next(d for d in info["devices"] if d["udid"] == device)
+    by_name = [d for d in info["devices"] if d["name"] == device]
+    if len(by_name) == 1:
+        return by_name[0]
+    if len(by_name) > 1:
+        raise PlanError("Several installed devices share that name; pick one in the simulator panel")
+    raise PlanError("That simulator device is not installed on this Mac")
 
 
 def host_info(root: str) -> dict:
@@ -384,16 +478,20 @@ def lab_status(lab: str, host: dict) -> dict:
         if lab == "ios":
             notes.append("Uses the same native Xcode installation as macOS Lab on this Mac.")
         xcode = host.get("xcode") or {}
+        idb_ready = bool(tools.get("idb")) and bool(tools.get("idb-companion"))
         reqs += [
             _req("xcode", "Full Xcode", xcode.get("installed"), hint="Install and open Xcode, then accept its license"),
             _req("ios-runtime", "iOS Simulator runtime", xcode.get("iosRuntime"), hint="Xcode > Settings > Components"),
             _req("ios-device", "Available iOS Simulator device", xcode.get("iosDevice"), hint="Add a simulator in Xcode"),
-            _req("brew", "Homebrew", tools.get("brew"), required=False, hint="https://brew.sh (needed for automated Appium setup)"),
+            _req("brew", "Homebrew", tools.get("brew"), required=False, hint="https://brew.sh (needed for automated Appium and idb setup)"),
             _req("node", "Node.js", tools.get("node"), required=False, hint="brew install node"),
             _req("appium", "Appium (XCUITest)", tools.get("appium"), required=False, hint="Install Appium (no administrator rights)"),
+            _req("idb", "idb (companion + client)", idb_ready, required=False, hint="Install idb (companion via Homebrew, client for this user)"),
         ]
         if not tools.get("appium"):
             notes.append("Appium automation needs Appium and its XCUITest driver; the simulator can run without them.")
+        if not idb_ready:
+            notes.append("idb device automation needs the idb companion and client; the simulator can run without them.")
     elif provider == "wsl2":
         distros = host["wsl"]["distributions"]
         reqs += [
@@ -429,8 +527,12 @@ def lab_status(lab: str, host: dict) -> dict:
         # Start, stop, resize, logs and the rest come back once the requirements are met.
         actions = [x for x in actions if x["id"] in SETUP_STATE_ACTIONS]
     if provider == "native-macos":
-        # Installed Appium: offer start/stop, not install. Not installed: offer install, not start/stop.
+        # Installed tooling: offer start/stop, not install. Missing tooling: offer install, not start/stop.
+        # The XCUITest smoke test additionally needs Appium with its XCUITest driver.
         drop = {"appium-install"} if tools.get("appium") else {"appium-start", "appium-stop"}
+        drop |= {"idb-install"} if tools.get("idb") and tools.get("idb-companion") else {"idb-start", "idb-stop"}
+        if not tools.get("appium"):
+            drop.add("xcuitest-smoke")
         actions = [a for a in actions if a["id"] not in drop]
         for a in actions:
             if a["id"] in NATIVE_SIMULATOR_INFO:
@@ -664,7 +766,15 @@ def plan(root: str, request: dict, host: dict | None = None) -> dict:
     if distro is not None and (not isinstance(distro, str) or len(distro) > 128 or distro.startswith("-")
                                or any(c in distro for c in "\r\n\0")):
         raise PlanError("Invalid WSL distribution")
-    for key in ("cpus", "ram", "disk", "device"):
+    device = request.get("device")
+    ios_attach = lab == "ios" and action == "start" and provider == "native-macos"
+    if device not in (None, ""):
+        # A device picks the simulator the start action boots; resize uses one for Android's emulator.
+        if not ios_attach and action != "resize":
+            raise PlanError("Resource parameters are only accepted by resize")
+        if not isinstance(device, str) or len(device) > 128 or any(c in device for c in "\r\n\0"):
+            raise PlanError("Invalid simulator device")
+    for key in ("cpus", "ram", "disk"):
         if request.get(key) not in (None, "") and action != "resize":
             raise PlanError("Resource parameters are only accepted by resize")
     if request.get("backup"):
@@ -683,14 +793,21 @@ def plan(root: str, request: dict, host: dict | None = None) -> dict:
             "status": ("status-mac.sh", None), "doctor": ("doctor-mac.sh", None),
             "setup": ("setup-mac.sh", "--install"), "start": ("run-simulator.sh", None),
             "stop": ("stop-simulator.sh", None), "appium-install": ("appium.sh", "install"), "appium-start": ("appium.sh", "start"),
-            "appium-stop": ("appium.sh", "stop"),
+            "appium-stop": ("appium.sh", "stop"), "idb-install": ("idb.sh", "install"), "idb-start": ("idb.sh", "start"),
+            "idb-stop": ("idb.sh", "stop"), "xcuitest-smoke": ("xcuitest.sh", "smoke"),
         }[action]
+        selected = []
+        if action == "start" and device not in (None, ""):
+            picked = _validated_ios_device(root, device)
+            selected = ["--device", picked["udid"]]
+            effects.append(f"Boots the iOS Simulator device {picked['name']} ({picked['runtime']}) on this Mac.")
         path = _scoped(root, "ios-lab", "mac", script)
         if not os.path.isfile(path):
             raise PlanError("Provider script is missing: ios-lab/mac/" + script)
-        program, args = "bash", [path] + ([extra] if extra else [])
+        program, args = "bash", [path] + ([extra] if extra else []) + selected
         privileged = False
-        timeout = 3600 if action == "setup" else 1800 if action == "appium-install" else 300
+        timeout = 3600 if action == "setup" else 1800 if action in ("appium-install", "idb-install") \
+            else 1500 if action == "xcuitest-smoke" else 300
     else:
         labctl = _scoped(root, "labctl")
         if not os.path.isfile(labctl):
@@ -767,7 +884,7 @@ def plan(root: str, request: dict, host: dict | None = None) -> dict:
                     raise PlanError("On macOS apply Android's lightweight (static) profile first; the emulator needs Linux/KVM")
             timeout = 900 if action in ("start", "restart") else 120
 
-    if action in ("start", "stop", "restart", "appium-start", "appium-stop"):
+    if action in ("start", "stop", "restart", "appium-start", "appium-stop", "idb-start", "idb-stop"):
         effects.append("Changes guest, container or service lifecycle.")
 
     # Elevation and WSL wrapping

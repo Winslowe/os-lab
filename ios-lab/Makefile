@@ -12,7 +12,7 @@ CONFIRM ?=
 PROFILE ?=
 INSTALL ?=
 
-.PHONY: help preflight setup prepare up up-gpu boot wait status monitor profiles logs shell web vnc restart update down backup restore install-service uninstall-service reset clean env mac-doctor mac-setup mac-profiles mac-profile mac-sim mac-stop mac-appium mac-appium-stop mac-status
+.PHONY: help preflight setup prepare up up-gpu boot wait status monitor profiles logs shell web vnc restart update down backup restore install-service uninstall-service reset clean env mac-doctor mac-setup mac-profiles mac-profile mac-sim mac-stop mac-appium mac-appium-stop mac-idb-install mac-idb mac-idb-stop mac-xcuitest mac-status
 
 help: ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -127,6 +127,18 @@ mac-appium: ## macOS host: start Appium (XCUITest driver)
 
 mac-appium-stop: ## macOS host: stop Appium
 	bash mac/appium.sh stop
+
+mac-idb-install: ## macOS host: install idb companion (Homebrew) and client
+	bash mac/idb.sh install
+
+mac-idb: ## macOS host: start an idb companion for the booted simulator
+	bash mac/idb.sh start
+
+mac-idb-stop: ## macOS host: stop the idb companion
+	bash mac/idb.sh stop
+
+mac-xcuitest: ## macOS host: run one XCUITest session through Appium on the booted simulator
+	bash mac/xcuitest.sh smoke
 
 mac-status: ## macOS host: show Xcode, booted simulators and Appium state
 	bash mac/status-mac.sh

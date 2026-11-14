@@ -1,9 +1,10 @@
 {
   "id": "PENT-23",
-  "name": "Deniz Pekova · (2520191029)",
+  "name": "Deniz Pekova · 2520191029",
   "github": "denizpekova",
   "course": "MYO062",
-  "status": "pr-open",
+  "note": "MYO062 vize seçenek 23",
+  "status": "done",
   "pr": "https://github.com/keyvanarasteh/os-lab/pull/168",
   "date": "2026-11-12"
 }

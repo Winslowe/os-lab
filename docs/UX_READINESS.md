@@ -22,7 +22,7 @@ The proposed extension and its tracked acceptance work are in the [UX guideline 
 
 ## Keep the default view compact and honest
 
-- Put configuration files, profiles, and endpoint addresses in a collapsed **Advanced settings** area on lab runtime pages. Keep required dependency status and primary actions visible.
+- Put configuration files, profiles, and endpoint addresses in a collapsed **Advanced settings** area on lab runtime pages. Keep required dependency status visible while anything is missing, and keep primary actions visible; once every tracked requirement is found, the Dependencies card may hide so the actions take the full row.
 - Describe an address as *configured* until the service is running. A known URL is not proof that it responds. Keep secondary Android endpoint lists collapsed and explain when they are usable.
 - Preserve a way to inspect details and copy addresses. Mask secrets before they reach the UI.
 - Use explicit loading, empty, success, and error states. Avoid cards that imply an operation succeeded before the API confirms it.

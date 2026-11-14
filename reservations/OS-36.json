@@ -2,8 +2,8 @@
   "id": "OS-36",
   "name": "Yağız Ünlü",
   "github": "yagznl",
-  "status": "in-progress",
   "course": "MYO203",
-  "pr": "",
+  "status": "pr-open",
+  "pr": "https://github.com/keyvanarasteh/os-lab/pull/188",
   "date": "2026-11-09"
 }

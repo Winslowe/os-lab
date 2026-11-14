@@ -135,6 +135,21 @@ export interface AndroidLogs {
   logs: string[];
   running: boolean;
 }
+/** One installed, available iOS Simulator device (console/oslab.py::ios_simulator). */
+export interface IosSimulatorDevice {
+  udid: string;
+  name: string;
+  runtime: string;
+  state: string;
+}
+export interface IosSimulatorInfo {
+  available: boolean;
+  reason: string | null;
+  devices: IosSimulatorDevice[];
+  runtimes: string[];
+  booted: IosSimulatorDevice[];
+  configuredDevice: string | null;
+}
 export interface Report {
   name: string;
   url: string;
@@ -285,6 +300,8 @@ export const api = {
   capabilities: () => call<CapabilityCatalog>("/api/capabilities"),
   config: (lab: LabId) => call<LabConfig>(`/api/labs/${lab}/config`),
   monitor: (lab: LabId) => call<LabMonitor>(`/api/labs/${lab}/monitor`),
+  iosSimulator: () => call<IosSimulatorInfo>(`/api/labs/ios/simulator`),
+  iosScreenshotUrl: "/api/labs/ios/screenshot",
   plan: (request: LabRequest) => post<{ plan: LabPlan; token: string }>("/api/labs/plan", { request }),
   start: (request: LabRequest, token: string) => post<LabJob>("/api/labs/start", { request, token }),
   jobs: () => call<{ jobs: LabJob[] }>("/api/jobs"),

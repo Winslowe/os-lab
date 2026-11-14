@@ -17,7 +17,13 @@ The Jobs page reports cancellation failure beside the selected job and keeps its
 
 ## Detail and endpoint status
 
-[[dashboard/src/views/lab-page.tsx]] keeps dependencies and actions visible while endpoints and configuration live in a collapsed Advanced settings panel. [[dashboard/src/views/android/pages.tsx]] keeps its secondary emulator endpoint list compact.
+[[dashboard/src/views/lab-page.tsx]] keeps the Dependencies card visible while
+anything is missing and hides it once every tracked requirement is found, so
+actions take the whole row. Endpoints and configuration stay in a collapsed
+Advanced settings panel.
+
+[[dashboard/src/views/android/pages.tsx]] keeps its secondary emulator endpoint
+list compact.
 
 An address from configuration describes where a service would answer; it does not establish that the service is running.
 
